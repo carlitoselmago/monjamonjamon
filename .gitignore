@@ -1,0 +1,7 @@
+/__pycache__/
+/images/
+/trained/
+/nbproject/
+/models/__pycache__/
+/graphs/
+*.h5
