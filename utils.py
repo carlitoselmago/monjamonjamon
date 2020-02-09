@@ -5,8 +5,7 @@ import sys
 from PIL import Image
 from PIL import Image, ImageOps 
 import os, random
-
-
+from time import sleep
 
 def getRandomStartSlice(InputSize):
     
@@ -35,6 +34,89 @@ def concat_v(im1, im2):
     dst.paste(im1, (0, 0))
     dst.paste(im2, (0, im1.height))
     return dst
+
+def cropImageInputs(amount=5,InputSize=[28,28]):
+    cut=int(InputSize[0]/2)
+    
+    cuts=[]
+    
+    oImgs=loadData(InputSize)
+    for oI in oImgs:
+        imgNP=oI[0:cut,:]
+        #print("imgNP shape",imgNP.shape)
+        cuts.append(imgNP)
+
+    cuts=np.array(cuts)
+    
+    return cuts
+        
+def buildFakeImages(amount=5,InputSize=[28,28]):
+    cut=int(InputSize[0]/2)
+    oImgs=loadData(InputSize)
+    #get some random original X images
+    idx = np.random.randint(0,oImgs.shape[0], amount)
+    oImgs = oImgs[idx]
+    #print("oImgs shape",oImgs.shape)
+    
+    faked=[]
+    
+    for oI in oImgs:
+        #print("oI shape",oI.shape)
+        #print("cut",cut)
+        #imgNP=oI[0,cut:0,oI.shape[0]]
+        imgNP=oI[0:cut,:]
+        #print("imgNP shape",imgNP.shape)
+        Oimg = Image.fromarray(imgNP)
+        #noise
+        #noise=np.random.random((cut,InputSize[0])) 
+        noise=noise_generator((cut,InputSize[1]))
+        
+        #print("noise.shape",noise.shape)
+        
+        Nimg=Image.fromarray(noise,"L")
+        canvas=concat_v(Oimg,Nimg)
+        canvas=canvas.convert('L')
+        im=np.array(canvas)
+        faked.append(im)
+        #canvas.show()
+        #sleep(2)
+        
+    faked=np.array(faked)
+    
+    return faked
+
+def noise_generator(shape):
+    
+    row,col= shape
+    ch=1
+    mean = 0.0
+    var = 0.01
+    sigma = var**0.5
+    gauss = np.array(shape)
+    gauss = np.random.normal(mean,sigma,(row,col))
+    gauss = gauss.reshape(row,col)
+    noisy = gauss
+    return noisy#.astype('uint8')
+    
+
+def loadData(InputSize=[28,28]):
+    X=[]
+    
+    for uri in glob.glob("images/*.jpg"):
+        im = Image.open(uri)
+        
+        #convert to grayscale
+        im=im.convert('L')
+        
+        im=im.resize((InputSize[0],InputSize[0]))
+        
+        im=np.array(im) 
+        
+        X.append(im)
+    
+    X=np.array(X)
+    
+    return X
 
 def prepareData(InputSize=[800,20],predHeight=1):
     X,Y=[],[]
@@ -145,25 +227,19 @@ def prepareData(InputSize=[800,20],predHeight=1):
     return np.array(X),np.array(Y)
 
 """
-def showImage(im):
+def showImage(im,mode="RGB"):
+    # if black and white  showImage(img[:,:,0]*255,"F")
+                    
+    img = Image.fromarray(im, mode)
+    """
     if len(im.shape)>2:
         img = Image.fromarray(im, 'RGB')
         img.show()
     else:
         #img = Image.fromarray(im, 'RGB')
         img = Image.fromarray(im, 'L')
-    #img.save('my.png')
+    """
+  
     print(img)
     img.show()
-    """
-    Helper function to plot an image.
-    """
-    """
-    y = im.shape[0]
-    x = im.shape[1]
-    w = (y/x) * h
-    plt.figure(figsize=(w,h))
-    plt.imshow(im, interpolation="none", **kwargs)
-    plt.axis('off')
-    plt.show()
-    """
+  
