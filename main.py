@@ -32,10 +32,12 @@ class RandomWeightedAverage(_Merge):
         alpha = K.random_uniform((32, 1, 1, 1))
         return (alpha * inputs[0]) + ((1 - alpha) * inputs[1])
 
+"""
 class joinImages(_Merge):
-    """concatenates input image with noise"""
+    
     def _merge_function(self,inputs):
         return K.concatenate((inputs[0], inputs[1]), axis=1)
+"""
 
 class WGANGP():
     def __init__(self):
@@ -70,8 +72,8 @@ class WGANGP():
         
         
         # Noise input
-        z_disc = Input(shape=(self.latent_dim,))
-        imageInput=Input(shape=self.img_input_shape)
+        z_disc = Input(shape=(self.latent_dim,),name="z_disc_input")
+        imageInput=Input(shape=self.img_input_shape,name="imageInput_input")
         
         # Generate image based of noise (fake sample)
         #fake_img = self.generator(z_disc)
@@ -79,32 +81,43 @@ class WGANGP():
         #multiple inputs  
         fake_img=self.generator([imageInput,z_disc])
         
-        fake_img_completed=joinImages()([imageInput,fake_img])
-        
-        
+        #fake_img_completed=joinImages()([imageInput,fake_img])
+        #print("fake_img",fake_img)
         
         # Discriminator determines validity of the real and fake images
         fake = self.critic(fake_img)
         valid = self.critic(real_img)
         
+        print("")
+        print("fake shape !!!!!!!!!!!!!!",fake.shape)
+        print("valid shape",valid.shape)
+        print("")
+        
         print("real and fake",real_img, fake_img)
-        print("fake_img_completed",fake_img_completed)
+        print("imageInput",imageInput)
+        fake_img_c=concatenate([imageInput, fake_img], axis=1)
+        print("fake_img_c",fake_img_c)
+        print("")
         #sys.exit()
         
         # Construct weighted average between real and fake images
-        interpolated_img = RandomWeightedAverage()([real_img, fake_img_completed])
+        interpolated_img = RandomWeightedAverage()([real_img, fake_img_c])
         
         # Determine validity of weighted sample
         validity_interpolated = self.critic(interpolated_img)
-
+        
+        print("")
+        print("validity_interpolated shape",validity_interpolated.shape)
+        print("")
+        
         # Use Python partial to provide loss function with additional
         # 'averaged_samples' argument
         partial_gp_loss = partial(self.gradient_penalty_loss,
                           averaged_samples=interpolated_img)
         partial_gp_loss.__name__ = 'gradient_penalty' # Keras requires function names
 
-        self.critic_model = Model(inputs=[real_img, z_disc],
-                            outputs=[valid, fake, validity_interpolated])
+        self.critic_model = Model(inputs=[real_img, z_disc,imageInput],
+                            outputs=[valid, fake, validity_interpolated],name="critic_model")
         self.critic_model.compile(loss=[self.wasserstein_loss,
                                               self.wasserstein_loss,
                                               partial_gp_loss],
@@ -122,11 +135,12 @@ class WGANGP():
         # Sampled noise for input to generator
         z_gen = Input(shape=(self.latent_dim,))
         # Generate images based of noise
-        img = self.generator(z_gen)
+        img = self.generator([imageInput,z_gen])
         # Discriminator determines validity
         valid = self.critic(img)
         # Defines generator model
-        self.generator_model = Model(z_gen, valid)
+        self.generator_model = Model([imageInput,z_gen], valid,name="generator_model")
+        self.generator_model.summary()
         self.generator_model.compile(loss=self.wasserstein_loss, optimizer=optimizer)
 
 
@@ -211,7 +225,7 @@ class WGANGP():
         
         z=Activation("tanh")(z)
         
-        model=Model(inputs=[i.input,n.input],outputs=z)
+        model=Model(inputs=[i.input,n.input],outputs=z,name="generator_model")
         model.summary()
         #return Model(noise, img)
         return model
@@ -242,22 +256,27 @@ class WGANGP():
         
         print("CRITIC MODEL!!!")
         model.summary()
-
+        print("self.img_shape",self.img_shape)
+        #sys.exit()
         img = Input(shape=self.img_shape)
         print("img input",img)
         validity = model(img)
         print("validity model",validity)
-        return Model(img, validity)
+        return Model(img, validity,name="validity_model")
 
     def train(self, epochs, batch_size, sample_interval=50):
-
+        print("")
+        print("")
+        print("TRAIN START")
+        print("")
+        print("")
         # Load the dataset
         #(X_train, _), (_, _) = mnist.load_data()
         
         #print("X_train shape",X_train.shape)
         
         X_train=loadData()
-        print("X_train jamon shape",X_train.shape)
+        #print("X_train jamon shape",X_train.shape)
         
         # Rescale -1 to 1
         X_train = (X_train.astype(np.float32) - 127.5) / 127.5
@@ -267,13 +286,14 @@ class WGANGP():
         valid = -np.ones((batch_size, 1))
         fake =  np.ones((batch_size, 1))
         
-        fake=buildFakeImages(batch_size,[self.img_rows,self.img_cols])
+        #fake=buildFakeImages(batch_size,[self.img_rows,self.img_cols])
         imgsToComplete=cropImageInputs(batch_size,[self.img_rows,self.img_cols])
+        imgsToComplete=(imgsToComplete.astype(np.float32) - 127.5) / 127.5
         
-        print("imgsToComplete",imgsToComplete)
+        #print("imgsToComplete",imgsToComplete)
         
-        print("valid",valid.shape)
-        print("fake",fake.shape)
+        #print("valid",valid.shape)
+        #print("fake",fake.shape)
         
         #build fake images
         
@@ -300,15 +320,23 @@ class WGANGP():
                 
                 # Sample generator input
                 noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
-                print("noise.shape",noise.shape)
-                sys.exit()
+                
                 imgs_input=imgsToComplete
+                imgs_input=imgs_input[idx]
                 
                 #print(noise.shape)
                 #print("holi")
                 #sys.exit()
                 # Train the critic
-                d_loss = self.critic_model.train_on_batch([imgs, [imgs_input,noise]],
+                
+                print("")
+                print("imgs",imgs.shape)
+                print("noise",noise.shape)
+                print("imgs_input",imgs_input.shape)
+                print("dummy",dummy.shape)
+                print("")
+                
+                d_loss = self.critic_model.train_on_batch([imgs,noise, imgs_input],
                                                                 [valid, fake, dummy])
 
             # ---------------------
@@ -345,4 +373,5 @@ class WGANGP():
 
 if __name__ == '__main__':
     wgan = WGANGP()
+   
     wgan.train(epochs=2001, batch_size=32, sample_interval=100)

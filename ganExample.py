@@ -64,18 +64,22 @@ class WGANGP():
         fake_img = self.generator(z_disc)
 
         # Discriminator determines validity of the real and fake images
+        print("fake_img shape",fake_img.shape)
         fake = self.critic(fake_img)
         valid = self.critic(real_img)
+        print("fake shape",fake.shape)
         
-        print("real and fake",real_img, fake_img)
-        sys.exit()
         # Construct weighted average between real and fake images
         interpolated_img = RandomWeightedAverage()([real_img, fake_img])
         
         
         # Determine validity of weighted sample
         validity_interpolated = self.critic(interpolated_img)
-
+        
+        print("")
+        print("validity_interpolated shape",validity_interpolated.shape)
+        print("")
+        
         # Use Python partial to provide loss function with additional
         # 'averaged_samples' argument
         partial_gp_loss = partial(self.gradient_penalty_loss,
@@ -198,6 +202,10 @@ class WGANGP():
         # Adversarial ground truths
         valid = -np.ones((batch_size, 1))
         fake =  np.ones((batch_size, 1))
+        
+        print("valid",valid.shape)
+        print("fake",fake.shape)
+        
         dummy = np.zeros((batch_size, 1)) # Dummy gt for gradient penalty
         for epoch in range(epochs):
 

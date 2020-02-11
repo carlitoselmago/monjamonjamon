@@ -48,6 +48,8 @@ def cropImageInputs(amount=5,InputSize=[28,28]):
 
     cuts=np.array(cuts)
     
+    cuts=cuts.reshape(cuts.shape+(1,))
+    
     return cuts
         
 def buildFakeImages(amount=5,InputSize=[28,28]):
