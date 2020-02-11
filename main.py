@@ -84,16 +84,14 @@ class WGANGP():
         fake_img=self.generator([imageInput,z_disc])
         
         #fake_img_completed=joinImages()([imageInput,fake_img])
-        #print("fake_img",fake_img)
+        print("fake_img",fake_img)
         
-        # Discriminator determines validity of the real and fake images
-        fake = self.critic(fake_img)
-        valid = self.critic(real_img)
         
-        print("")
-        print("fake shape !!!!!!!!!!!!!!",fake.shape)
-        print("valid shape",valid.shape)
-        print("")
+        
+        #print("")
+        #print("fake shape !!!!!!!!!!!!!!",fake.shape)
+        #print("valid shape",valid.shape)
+        #print("")
         
         print("real and fake",real_img, fake_img)
         print("imageInput",imageInput)
@@ -101,6 +99,10 @@ class WGANGP():
         print("fake_img_c",fake_img_c)
         print("")
         #sys.exit()
+        
+        # Discriminator determines validity of the real and fake images
+        fake = self.critic(fake_img_c)
+        valid = self.critic(real_img)
         
         # Construct weighted average between real and fake images
         interpolated_img = RandomWeightedAverage()([real_img, fake_img_c])
@@ -137,12 +139,16 @@ class WGANGP():
 
         # Sampled noise for input to generator
         z_gen = Input(shape=(self.latent_dim,))
+        
+        imageInput2=Input(shape=self.img_input_shape,name="imageInput_input_generator")
+        
         # Generate images based of noise
-        img = self.generator([imageInput,z_gen])
+        img = self.generator([imageInput2,z_gen])
+        fake_img_c2=concatenate([imageInput2, img], axis=1)
         # Discriminator determines validity
-        valid = self.critic(img)
+        valid = self.critic(fake_img_c2)
         # Defines generator model
-        self.generator_model = Model([imageInput,z_gen], valid,name="generator_model")
+        self.generator_model = Model([imageInput2,z_gen], valid,name="generator_modelz")
         self.generator_model.summary()
         self.generator_model.compile(loss=self.wasserstein_loss, optimizer=optimizer)
 
@@ -191,7 +197,7 @@ class WGANGP():
         n=Activation("relu")(n)
         #
         n=Flatten()(n)
-        n=Dense(mergeNeurons,activation='relu')(n)
+        n=Dense(mergeNeurons,activation='sigmoid')(n)
         #n=Reshape((28, 28, 64))(n)
         n=Model(inputs=inputNoise,outputs=n)
         
@@ -212,7 +218,7 @@ class WGANGP():
         i=Conv2D(32,(3,3),padding="same",activation='relu')(i)
         
         i=Flatten()(i)
-        i=Dense(mergeNeurons,activation='relu')(i)
+        i=Dense(mergeNeurons,activation='sigmoid')(i)
         i=Model(inputs=inputImage,outputs=i)
         
         print("GENERATOR MODEL!!!")
@@ -222,9 +228,9 @@ class WGANGP():
         combined = concatenate([i.output, n.output])
         
         #more layers
-        #z=Conv2D(self.channels, kernel_size=4, padding="same")(combined)
-        
-        z=Dense((self.img_input_shape[0]*self.img_input_shape[1]),activation='relu')(combined)
+        z=Dense((32),activation='relu')(combined)
+        #z=Dense((self.img_input_shape[0]*self.img_input_shape[1]),activation='relu')(combined)
+        z=Dense((self.img_input_shape[0]*self.img_input_shape[1]),activation='relu')(z)
         #print (z)
         #z=Flatten()(combined)
         #z=Conv2D(256,(3,3),padding="same",activation='relu')(combined)
@@ -273,18 +279,21 @@ class WGANGP():
 
     def train(self, epochs, batch_size, sample_interval=50):
         print("")
-        print("")
+        #print("")
         print("TRAIN START")
-        print("")
-        print("")
+        #print("")
+        #print("")
         # Load the dataset
         #(X_train, _), (_, _) = mnist.load_data()
         
         #print("X_train shape",X_train.shape)
         
-        X_train=loadData()
+        X_train,self.X_test=loadData()
+        self.X_test=cropImageInputs(len(self.X_test),[self.img_rows,self.img_cols])
+        self.X_test=(self.X_test.astype(np.float32) - 127.5) / 127.5
         
-        print("X_train shape",X_train.shape)
+        #print("X_train shape",X_train.shape)
+        #print("self.X_test",self.X_test.shape)
         #print("X_train jamon shape",X_train.shape)
         
         # Rescale -1 to 1
@@ -306,12 +315,12 @@ class WGANGP():
         
         #build fake images
         
-        
         dummy = np.zeros((batch_size, 1)) # Dummy gt for gradient penalty
+        
         for epoch in range(epochs):
 
             for _ in range(self.n_critic):
-                print("################# ",_)
+                #print("################# ",_)
                 # ---------------------
                 #  Train Discriminator
                 # ---------------------
@@ -331,6 +340,7 @@ class WGANGP():
                 noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
                 
                 imgs_input=imgsToComplete
+                #print("idx",idx)
                 imgs_input=imgs_input[idx]
                 
                 #print(noise.shape)
@@ -338,6 +348,7 @@ class WGANGP():
                 #sys.exit()
                 # Train the critic
                 
+                """
                 print("")
                 print("imgs",imgs.shape)
                 print("noise",noise.shape)
@@ -346,6 +357,7 @@ class WGANGP():
                 print("valid",valid.shape)
                 print("fake",fake.shape)
                 print("")
+                """
                 
                 d_loss = self.critic_model.train_on_batch([imgs,noise, imgs_input],
                                                                 [valid, fake, dummy])
@@ -353,8 +365,14 @@ class WGANGP():
             # ---------------------
             #  Train Generator
             # ---------------------
-
-            g_loss = self.generator_model.train_on_batch(noise, valid)
+            
+            #print("_______________TRAIN GENERATOR___________________________")
+            #print("")
+            #print("imgs_input",imgs_input.shape)
+            #print("noise",noise.shape)
+            #print("valid",valid.shape)
+            
+            g_loss = self.generator_model.train_on_batch([imgs_input,noise],valid)
 
             # Plot the progress
             print ("%d [D loss: %f] [G loss: %f]" % (epoch, d_loss[0], g_loss))
@@ -366,7 +384,13 @@ class WGANGP():
     def sample_images(self, epoch):
         r, c = 5, 5
         noise = np.random.normal(0, 1, (r * c, self.latent_dim))
-        gen_imgs = self.generator.predict(noise)
+        #print ("noise shape",noise.shape)
+        #print("self.X_test",self.X_test.shape)
+        #print("self.X_test",self.X_test)
+        np.random.shuffle(self.X_test)
+        imgC=self.X_test[0:noise.shape[0]]
+        #print("imgC shape", imgC.shape)
+        gen_imgs = self.generator.predict([imgC,noise])
 
         # Rescale images 0 - 1
         gen_imgs = 0.5 * gen_imgs + 0.5
@@ -378,11 +402,11 @@ class WGANGP():
                 axs[i,j].imshow(gen_imgs[cnt, :,:,0], cmap='gray')
                 axs[i,j].axis('off')
                 cnt += 1
-        fig.savefig("images/mnist_%d.png" % epoch)
+        fig.savefig("graphs/jamon_%d.png" % epoch)
         plt.close()
 
 
 if __name__ == '__main__':
     wgan = WGANGP()
    
-    wgan.train(epochs=101, batch_size=batchSize, sample_interval=100)
+    wgan.train(epochs=3000, batch_size=batchSize, sample_interval=100)

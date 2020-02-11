@@ -40,7 +40,7 @@ def cropImageInputs(amount=5,InputSize=[28,28]):
     
     cuts=[]
     
-    oImgs=loadData(InputSize)
+    oImgs,_=loadData(InputSize)
     for oI in oImgs:
         imgNP=oI[0:cut,:]
         #print("imgNP shape",imgNP.shape)
@@ -118,7 +118,11 @@ def loadData(InputSize=[28,28]):
     
     X=np.array(X)
     
-    return X
+    #split some test
+    cutP=int(len(X)*0.8)
+    X_train=X[cutP:]
+    X_test=X[:cutP]
+    return X_test,X_train
 
 def prepareData(InputSize=[800,20],predHeight=1):
     X,Y=[],[]
