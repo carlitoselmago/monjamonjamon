@@ -7,6 +7,19 @@ from PIL import Image, ImageOps
 import os, random
 from time import sleep
 
+def getRandomJamon(InputSize):
+    InputHeight=InputSize[1]
+    uri=random.choice(os.listdir("images"))
+    image = Image.open("images/"+uri)
+    
+    oImage=image
+    
+    image=image.resize((InputSize[0],InputSize[0]))
+    im=np.array(image)
+    #im=normalize0to1(im)
+    im=im.reshape((1,)+im.shape)
+    return im,oImage
+
 def getRandomStartSlice(InputSize):
     
     InputHeight=InputSize[1]
@@ -85,6 +98,70 @@ def loadDataReady(amount=5,InputSize=[28,28]):
     GT_test=oImgs[splitP:]
 
     return X_train,X_test,Y_train,Y_test,GT_train,GT_test
+
+def loadDataReady2(amount=5,InputSize=[28,28],mode="GREY"):
+    cut=int(InputSize[0]/2)
+    
+    cutsUp=[]
+    cutsDown=[]
+    
+    oImgs=loadDataRaw(InputSize,mode)
+    for oI in oImgs:
+        imgNP=oI[0:cut,:]
+        cutsUp.append(imgNP)
+        
+        imgDNP=oI[cut:,:]
+        cutsDown.append(imgDNP)
+
+    cutsUp=np.array(cutsUp)
+    cutsDown=np.array(cutsDown)
+    #cuts=cuts.reshape(cuts.shape+(1,))
+    
+    # Rescale -1 to 1
+    cutsUp = normalizeMinus1to1(cutsUp)#(cuts.astype(np.float32) - 127.5) / 127.5
+    if mode=="GREY":
+        cutsUp = np.expand_dims(cutsUp, axis=3)
+    
+    cutsDown = normalizeMinus1to1(cutsDown)#(cuts.astype(np.float32) - 127.5) / 127.5
+    if mode=="GREY":
+        cutsDown = np.expand_dims(cutsDown, axis=3)
+    
+    oImgs = normalizeMinus1to1(oImgs)#(oImgs.astype(np.float32) - 127.5) / 127.5
+    if mode=="GREY":
+        oImgs = np.expand_dims(oImgs, axis=3)
+    
+    #split some for test
+    splitP=int(len(oImgs)*0.8)
+   
+    X_train=cutsUp[:splitP]
+    X_test=cutsUp[splitP:]
+    
+    Y_train=cutsDown[:splitP]
+    Y_test=cutsDown[splitP:]
+    
+    #ground truths
+    GT_train=oImgs[:splitP]
+    GT_test=oImgs[splitP:]
+
+    return X_train,X_test,Y_train,Y_test,GT_train,GT_test
+
+def maskimageBottom(img):
+    
+    y1 =int(img.shape[0]/2)
+    y2 =img.shape[0]
+    x1 =0
+    x2 =img.shape[1]
+    
+    masked_imgs = np.empty_like(img)
+    missing_parts = np.empty(( y1, img.shape[1],img.shape[2]))
+    
+    masked_img = img.copy()
+    missing_parts = masked_img[y1:y2, x1:x2, :].copy()
+    masked_img[y1:y2, x1:x2, :] = 0
+    return masked_img
+
+def addEmptyMaskBottom(img):
+    return img.resize((img.shape[0]*2, img.shape[1]))
 
 def cropImageInputs(amount=5,InputSize=[28,28]):
     cut=int(InputSize[0]/2)
@@ -175,14 +252,16 @@ def loadData(InputSize=[28,28]):
     X_test=X[:cutP]
     return X_test,X_train
 
-def loadDataRaw(InputSize=[28,28]):
+def loadDataRaw(InputSize=[28,28],mode="GREY"):
     X=[]
-    
+   
+   
     for uri in glob.glob("images/*.jpg"):
         im = Image.open(uri)
         
-        #convert to grayscale
-        im=im.convert('L')
+        if mode=="GREY":
+            #convert to grayscale
+            im=im.convert('L')
         
         im=im.resize((InputSize[0],InputSize[0]))
         
@@ -304,10 +383,21 @@ def prepareData(InputSize=[800,20],predHeight=1):
     return np.array(X),np.array(Y)
 
 """
-def showImageNormal(im):
-    imtoShow = 255 * im[:,:,0]#[0][:,:,0] # Now scale by 255
+def denormalizeImage(image, from_min, from_max, to_min, to_max):
+    
+    #example : interval_mapping(image, 0, 255, 0.0, 1.0)
+    
+    # map values from [from_min, from_max] to [to_min, to_max]
+    # image: input array
+    from_range = from_max - from_min
+    to_range = to_max - to_min
+    scaled = np.array((image - from_min) / float(from_range), dtype=float)
+    return to_min + (scaled * to_range)
+
+def showImageNormal(im,mode="L"):
+    imtoShow = 255 * im#[:,:,0]#[0][:,:,0] # Now scale by 255
     imtoShow = imtoShow.astype(np.uint8)
-    showImage(imtoShow,"L")
+    showImage(imtoShow,mode)
 
 def showImage(im,mode="RGB"):
     # if black and white  showImage(img[:,:,0]*255,"F")

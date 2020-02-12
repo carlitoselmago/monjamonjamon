@@ -1,20 +1,13 @@
-
-# Large amount of credit goes to:
-# https://github.com/keras-team/keras-contrib/blob/master/examples/improved_wgan.py
-# which I've used as a reference for this implementation
-
+#https://github.com/eriklindernoren/Keras-GAN/blob/master/wgan/wgan.py
 from __future__ import print_function, division
 
 from keras.datasets import mnist
-from keras.layers.merge import _Merge
-from keras.layers import Input, Dense, Reshape, Flatten, Dropout,MaxPooling2D, concatenate
+from keras.layers import Input, Dense, Reshape, Flatten, Dropout
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.convolutional import UpSampling2D, Conv2D
 from keras.models import Sequential, Model
 from keras.optimizers import RMSprop
-from functools import partial
-from keras.optimizers import *
 
 import keras.backend as K
 
@@ -27,135 +20,78 @@ import numpy as np
 from utils import *
 from time import sleep
 
-batchSize=32
-
-class RandomWeightedAverage(_Merge):
-    """Provides a (random) weighted average between real and generated image samples"""
-    def _merge_function(self, inputs):
-        alpha = K.random_uniform((batchSize, 1, 1, 1))
-        return (alpha * inputs[0]) + ((1 - alpha) * inputs[1])
-
-"""
-class joinImages(_Merge):
-    
-    def _merge_function(self,inputs):
-        return K.concatenate((inputs[0], inputs[1]), axis=1)
-"""
-
-class WGANGP():
+class WGAN():
     def __init__(self):
-        self.img_rows = 28
-        self.img_cols = 28
+        self.img_rows = 112
+        self.img_cols = 112
         self.channels = 1
-        
-        self.img_input_rows=int(self.img_rows/2)
-        
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         self.latent_dim = 100
-        self.img_input_shape=(self.img_input_rows, self.img_cols, self.channels)
-        
+
         # Following parameter and optimizer set as recommended in paper
         self.n_critic = 5
+        self.clip_value = 0.01
+        optimizer = RMSprop(lr=0.00005)
 
-        self.loss="sparse_categorical_crossentropy"
-        self.optm=Adam(lr=1e-3)
+        # Build and compile the critic
+        self.critic = self.build_critic()
+        self.critic.compile(loss=self.wasserstein_loss,
+            optimizer=optimizer,
+            metrics=['accuracy'])
 
-    def gradient_penalty_loss(self, y_true, y_pred, averaged_samples):
-        """
-        Computes gradient penalty based on prediction and weighted real / fake samples
-        """
-        gradients = K.gradients(y_pred, averaged_samples)[0]
-        # compute the euclidean norm by squaring ...
-        gradients_sqr = K.square(gradients)
-        #   ... summing over the rows ...
-        gradients_sqr_sum = K.sum(gradients_sqr,
-                                  axis=np.arange(1, len(gradients_sqr.shape)))
-        #   ... and sqrt
-        gradient_l2_norm = K.sqrt(gradients_sqr_sum)
-        # compute lambda * (1 - ||grad||)^2 still for each single sample
-        gradient_penalty = K.square(1 - gradient_l2_norm)
-        # return the mean as loss over all the batch samples
-        return K.mean(gradient_penalty)
+        # Build the generator
+        self.generator = self.build_generator()
 
+        # The generator takes noise as input and generated imgs
+        z = Input(shape=(self.latent_dim,))
+        img = self.generator(z)
+
+        # For the combined model we will only train the generator
+        self.critic.trainable = False
+
+        # The critic takes generated images as input and determines validity
+        valid = self.critic(img)
+
+        # The combined model  (stacked generator and critic)
+        self.combined = Model(z, valid)
+        self.combined.compile(loss=self.wasserstein_loss,
+            optimizer=optimizer,
+            metrics=['accuracy'])
 
     def wasserstein_loss(self, y_true, y_pred):
         return K.mean(y_true * y_pred)
 
     def build_generator(self):
-        #functional model (2 concatenated inputs)
-        
-        inputImageShape=self.img_input_shape
-        
-        inputImage=Input(shape=inputImageShape)
-        inputNoise=Input(shape=(self.latent_dim,))
-        
-        mergeNeurons=2600
-        
-        #noise net
-        n=Dense(128 * 7 * 7, activation="relu", input_dim=self.latent_dim)(inputNoise)
-        n=Reshape((7, 7, 128))(n)
-        n=UpSampling2D()(n)
-        n=Conv2D(128, kernel_size=4, padding="same")(n)
-        n=BatchNormalization(momentum=0.8)(n)
-        n=Activation("relu")(n)
-        n=UpSampling2D()(n)
-        n=Conv2D(64, kernel_size=4, padding="same")(n)
-        n=BatchNormalization(momentum=0.8)(n)
-        n=Activation("relu")(n)
-        #
-        n=Flatten()(n)
-        n=Dense(mergeNeurons,activation='sigmoid')(n)
-        #n=Reshape((28, 28, 64))(n)
-        n=Model(inputs=inputNoise,outputs=n)
-        
-        #n.summary()
-        
-        #image net
-        i=Conv2D(256,(3,3),padding="same",strides=(4,4),input_shape=inputImageShape,activation='relu')(inputImage)
-        i=MaxPooling2D(pool_size=(2, 2))(i)
-        i=Dropout(0.2)(i)
-        i=Conv2D(128,(3,3),padding="same",activation='relu')(i)
-        i=MaxPooling2D(pool_size=(2, 2))(i)
-        i=Dropout(0.2)(i)
-        i=Conv2D(64,(3,3),padding="same",activation='relu')(i)
-        
-        #i=MaxPooling2D(pool_size=(2, 2))(i)
-        #i=Conv2D(256,(3,3),padding="same",activation='relu')(i)
-        
-        i=Conv2D(32,(3,3),padding="same",activation='relu')(i)
-        
-        i=Flatten()(i)
-        i=Dense(mergeNeurons,activation='sigmoid')(i)
-        i=Model(inputs=inputImage,outputs=i)
-        
-        print("GENERATOR MODEL!!!")
-        #i.summary()
-        
-        #merge them
-        combined = concatenate([i.output, n.output])
-        
-        #more layers
-        z=Dense((32),activation='relu')(combined)
-        #z=Dense((self.img_input_shape[0]*self.img_input_shape[1]),activation='relu')(combined)
-        z=Dense((self.img_input_shape[0]*self.img_input_shape[1]),activation='relu')(z)
-        #print (z)
-        #z=Flatten()(combined)
-        #z=Conv2D(256,(3,3),padding="same",activation='relu')(combined)
-        z=Reshape(inputImageShape)(z)
-        
-        #z=Activation("tanh")(z)
-        z=Activation("sigmoid")(z)
-        
-        model=Model(inputs=[i.input,n.input],outputs=z,name="generator_model")
+
+        model = Sequential()
+
+        model.add(Dense(128 * 7 * 7, activation="relu", input_dim=self.latent_dim))
+        model.add(Reshape((7, 7, 128)))
+        model.add(UpSampling2D())
+        model.add(Conv2D(128, kernel_size=4, padding="same"))
+        model.add(BatchNormalization(momentum=0.8))
+        model.add(Activation("relu"))
+        model.add(UpSampling2D())
+        model.add(Conv2D(64, kernel_size=4, padding="same"))
+        model.add(BatchNormalization(momentum=0.8))
+        model.add(Activation("sigmoid"))
+        model.add(UpSampling2D())
+        model.add(Conv2D(self.channels, kernel_size=4, padding="same"))
+        model.add(UpSampling2D())
+        model.add(Activation("tanh"))
+
         model.summary()
-        #return Model(noise, img)
-        return model
-        
+
+        noise = Input(shape=(self.latent_dim,))
+        img = model(noise)
+
+        return Model(noise, img)
+
     def build_critic(self):
 
         model = Sequential()
-        
-        model.add(Conv2D(16, kernel_size=3, strides=2, input_shape=self.img_shape, padding="same",name="input_critic"))
+
+        model.add(Conv2D(16, kernel_size=3, strides=2, input_shape=self.img_shape, padding="same"))
         model.add(LeakyReLU(alpha=0.2))
         model.add(Dropout(0.25))
         model.add(Conv2D(32, kernel_size=3, strides=2, padding="same"))
@@ -172,107 +108,82 @@ class WGANGP():
         model.add(LeakyReLU(alpha=0.2))
         model.add(Dropout(0.25))
         model.add(Flatten())
-        model.add(Dense(1,name="dense_boolean"))
-        
-        
-        print("CRITIC MODEL!!!")
-        model.summary()
-        #print("self.img_shape",self.img_shape)
-        #sys.exit()
-        img = Input(shape=self.img_shape)
-        #print("img input",img)
-        validity = model(img)
-        #print("validity model",validity)
-        return Model(img, validity,name="validity_model")
+        model.add(Dense(1))
 
-    def train(self, epochs, batch_size, sample_interval=50):
+        model.summary()
+
+        img = Input(shape=self.img_shape)
+        validity = model(img)
+
+        return Model(img, validity)
+
+    def train(self, epochs, batch_size=128, sample_interval=50):
+
+        # Load the dataset
+        #(X_train, _), (_, _) = mnist.load_data()
         
-        print("TRAIN START")
+        #X_train,X_test,Y_train,Y_test,GT_train,GT_test=loadDataReady2()
+        _,X_test,Y_train,Y_test,X_train,GT_test=loadDataReady2(amount=100000,InputSize=[self.img_rows,self.img_cols])
         
-        self.n_critic = 5
-        optimizer = RMSprop(lr=0.00005)
-        
-        # Build the generator and critic
-        self.generator = self.build_generator()
-        self.critic = self.build_critic()
-        
-        #self.generator.compile(loss=self.wasserstein_loss, optimizer=optimizer)
-        #self.critic.compile(loss=self.wasserstein_loss, optimizer=optimizer)
-        
-        self.generator.compile(loss=self.loss, optimizer=self.optm)
-        self.critic.compile(loss=self.loss, optimizer=self.optm)
-        
-        X_train,X_test,Y_train,Y_test,GT_train,GT_test=loadDataReady()
-        print("X_train,X_test,Y_train,Y_test",X_train.shape,X_test.shape,Y_train.shape,Y_test.shape)
-        
+        #print("X_train",X_train.shape)
+        #sys.exit()
+        # Rescale -1 to 1
+        #X_train = (X_train.astype(np.float32) - 127.5) / 127.5
+        #X_train = np.expand_dims(X_train, axis=3)
+
         # Adversarial ground truths
-        #valid = -np.ones((batch_size, 1))
-        #fake =  np.ones((batch_size, 1))
-        
-        for _ in range(epochs):
-            
-            #batch of images
-            idx = np.random.randint(0, X_train.shape[0], batch_size)
-            X_train_b = X_train[idx]
-            Y_train_b = Y_train[idx]
-            GT_train_b = GT_train[idx]
-            
-            print("epoch ",_,"/",epochs)
-            
-            for i in range(X_train_b.shape[0]):
+        valid = -np.ones((batch_size, 1))
+        fake = np.ones((batch_size, 1))
+
+        for epoch in range(epochs):
+
+            for _ in range(self.n_critic):
+
+                # ---------------------
+                #  Train Discriminator
+                # ---------------------
+
+                # Select a random batch of images
+                idx = np.random.randint(0, X_train.shape[0], batch_size)
+                imgs = X_train[idx]
                 
-                #noise
-                #noise = np.random.normal(0, 1, (1, self.latent_dim))
-                noise=np.random.uniform(0,1,(1, self.latent_dim))
-            
-                #top X image
-                topImage=X_train_b[i].reshape((1,)+X_train_b[i].shape)
+                # Sample noise as generator input
+                noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
+
+                # Generate a batch of new images
+                gen_imgs = self.generator.predict(noise)
                 
-                #generate
-                generated=self.generator.predict([topImage,noise])
-          
-                #combine X image
-                combined=np.vstack((topImage[0],generated[0]))
-                
-                #showImage(imtoShow,"L")
-                #sleep(2)
-                
-                #real image
-                realImage=GT_train_b[i].reshape((1,)+GT_train_b[i].shape)
-                
-                #discriminate image
-                combinedP=combined.reshape((1,)+combined.shape)
-                
-                #fake=self.critic.predict(combinedP)
-                #real=self.critic.predict(realImage)
-                fake=np.array(0.0)
-                real=np.array(.99)
-                
-                Xfit=np.array([combined,realImage[0]])
-                #Yfit=np.array([fake[0],real[0]])
-                Yfit=np.array([fake,real])
-                
-                #save training
-                self.critic.fit(Xfit,Yfit,epochs=1,verbose=0)
-                
-                YfitG=Y_train_b[i].reshape((1,)+Y_train_b[i].shape)
-                
-                self.generator.fit([topImage,noise],YfitG,verbose=0)
-            
-            showImageNormal(combined)
-            
-            sleep(2)
-        
+                #print("gen_imgs.shape",gen_imgs.shape)
+                #print("")
+                # Train the critic
+                d_loss_real = self.critic.train_on_batch(imgs, valid)
+                d_loss_fake = self.critic.train_on_batch(gen_imgs, fake)
+                d_loss = 0.5 * np.add(d_loss_fake, d_loss_real)
+
+                # Clip critic weights
+                for l in self.critic.layers:
+                    weights = l.get_weights()
+                    weights = [np.clip(w, -self.clip_value, self.clip_value) for w in weights]
+                    l.set_weights(weights)
+
+
+            # ---------------------
+            #  Train Generator
+            # ---------------------
+
+            g_loss = self.combined.train_on_batch(noise, valid)
+
+            # Plot the progress
+            print ("%d [D loss: %f] [G loss: %f]" % (epoch, 1 - d_loss[0], 1 - g_loss[0]))
+
+            # If at save interval => save generated image samples
+            if epoch % sample_interval == 0:
+                self.sample_images(epoch)
+
     def sample_images(self, epoch):
         r, c = 5, 5
         noise = np.random.normal(0, 1, (r * c, self.latent_dim))
-        #print ("noise shape",noise.shape)
-        #print("self.X_test",self.X_test.shape)
-        #print("self.X_test",self.X_test)
-        np.random.shuffle(self.X_test)
-        imgC=self.X_test[0:noise.shape[0]]
-        #print("imgC shape", imgC.shape)
-        gen_imgs = self.generator.predict([imgC,noise])
+        gen_imgs = self.generator.predict(noise)
 
         # Rescale images 0 - 1
         gen_imgs = 0.5 * gen_imgs + 0.5
@@ -284,11 +195,10 @@ class WGANGP():
                 axs[i,j].imshow(gen_imgs[cnt, :,:,0], cmap='gray')
                 axs[i,j].axis('off')
                 cnt += 1
-        fig.savefig("graphs/jamon_%d.png" % epoch)
+        fig.savefig("graphs/mnist_%d.png" % epoch)
         plt.close()
 
 
 if __name__ == '__main__':
-    wgan = WGANGP()
-   
-    wgan.train(epochs=100, batch_size=batchSize, sample_interval=100)
+    wgan = WGAN()
+    wgan.train(epochs=4000, batch_size=32, sample_interval=50)
