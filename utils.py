@@ -35,6 +35,57 @@ def concat_v(im1, im2):
     dst.paste(im2, (0, im1.height))
     return dst
 
+def normalize0to1(data):
+    info = np.iinfo(data.dtype)
+    data=data.astype(np.float64) / info.max # normalize the data to 0 - 1
+    return data
+
+def normalizeMinus1to1(data):
+    return (data.astype(np.float32) - 127.5) / 127.5
+
+def loadDataReady(amount=5,InputSize=[28,28]):
+    cut=int(InputSize[0]/2)
+    
+    cutsUp=[]
+    cutsDown=[]
+    
+    oImgs=loadDataRaw(InputSize)
+    for oI in oImgs:
+        imgNP=oI[0:cut,:]
+        cutsUp.append(imgNP)
+        
+        imgDNP=oI[cut:,:]
+        cutsDown.append(imgDNP)
+
+    cutsUp=np.array(cutsUp)
+    cutsDown=np.array(cutsDown)
+    #cuts=cuts.reshape(cuts.shape+(1,))
+    
+    # Rescale -1 to 1
+    cutsUp = normalize0to1(cutsUp)#(cuts.astype(np.float32) - 127.5) / 127.5
+    cutsUp = np.expand_dims(cutsUp, axis=3)
+    
+    cutsDown = normalize0to1(cutsDown)#(cuts.astype(np.float32) - 127.5) / 127.5
+    cutsDown = np.expand_dims(cutsDown, axis=3)
+    
+    oImgs = normalize0to1(oImgs)#(oImgs.astype(np.float32) - 127.5) / 127.5
+    oImgs = np.expand_dims(oImgs, axis=3)
+    
+    #split some for test
+    splitP=int(len(oImgs)*0.8)
+   
+    X_train=cutsUp[:splitP]
+    X_test=cutsUp[splitP:]
+    
+    Y_train=cutsDown[:splitP]
+    Y_test=cutsDown[splitP:]
+    
+    #ground truths
+    GT_train=oImgs[:splitP]
+    GT_test=oImgs[splitP:]
+
+    return X_train,X_test,Y_train,Y_test,GT_train,GT_test
+
 def cropImageInputs(amount=5,InputSize=[28,28]):
     cut=int(InputSize[0]/2)
     
@@ -123,6 +174,26 @@ def loadData(InputSize=[28,28]):
     X_train=X[cutP:]
     X_test=X[:cutP]
     return X_test,X_train
+
+def loadDataRaw(InputSize=[28,28]):
+    X=[]
+    
+    for uri in glob.glob("images/*.jpg"):
+        im = Image.open(uri)
+        
+        #convert to grayscale
+        im=im.convert('L')
+        
+        im=im.resize((InputSize[0],InputSize[0]))
+        
+        im=np.array(im) 
+        
+        X.append(im)
+    
+    X=np.array(X)
+    
+    
+    return X
 
 def prepareData(InputSize=[800,20],predHeight=1):
     X,Y=[],[]
@@ -233,6 +304,11 @@ def prepareData(InputSize=[800,20],predHeight=1):
     return np.array(X),np.array(Y)
 
 """
+def showImageNormal(im):
+    imtoShow = 255 * im[:,:,0]#[0][:,:,0] # Now scale by 255
+    imtoShow = imtoShow.astype(np.uint8)
+    showImage(imtoShow,"L")
+
 def showImage(im,mode="RGB"):
     # if black and white  showImage(img[:,:,0]*255,"F")
                     
@@ -246,6 +322,6 @@ def showImage(im,mode="RGB"):
         img = Image.fromarray(im, 'L')
     """
   
-    print(img)
+    #print(img)
     img.show()
   
