@@ -21,8 +21,8 @@ from time import sleep
 
 class ContextEncoder():
     def __init__(self):
-        self.img_rows = 30
-        self.img_cols = 30
+        self.img_rows = 60
+        self.img_cols = 60
         self.mask_height = int(self.img_cols/3)#8
         self.mask_width = self.img_rows#8
         self.channels = 3
@@ -260,8 +260,7 @@ class ContextEncoder():
         gen_missing = 0.5 * gen_missing + 0.5
 
         imgplot=plt.imshow(masked_imgs[0])
-        plt.show()
-        sys.exit()
+
 
         fig, axs = plt.subplots(r, c)
         for i in range(c):
@@ -294,6 +293,6 @@ class ContextEncoder():
 
 if __name__ == '__main__':
     context_encoder = ContextEncoder()
-    context_encoder.train(epochs=30000, batch_size=64, sample_interval=50) #30000
+    context_encoder.train(epochs=40000, batch_size=64, sample_interval=50) #30000
     #context_encoder.train(epochs=100, batch_size=64, sample_interval=50) #30000
     context_encoder.save_model()

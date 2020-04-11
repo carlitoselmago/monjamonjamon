@@ -8,7 +8,7 @@ import os, random
 from time import sleep
 import cv2
 
-
+randomJamonesUsed=[]
 
 def getRandomStartSlice(InputSize):
 
@@ -246,9 +246,17 @@ def noise_generator(shape):
 
 def getRandomJamon(InputSize):
     InputHeight=InputSize[1]
-    uri=random.choice(os.listdir("images"))
-    image = Image.open("images/"+uri)
 
+    options=os.listdir("images")
+
+    for o,i in enumerate(options):
+        if o in randomJamonesUsed:
+            options.pop(i)
+
+    uri=random.choice(options)
+    randomJamonesUsed.append(uri)
+    image = Image.open("images/"+uri)
+    
     oImage=image
 
     image=image.resize((InputSize[0],InputSize[0]))

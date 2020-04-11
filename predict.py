@@ -14,8 +14,8 @@ imageInputSize=[80,40]
 predictionH=40
 """
 modelname="generator"
-imageInputSize=[30,30]
-predictionH=10
+imageInputSize=[60,60]
+predictionH=20
 
 predictionIter=50
 #:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -46,8 +46,6 @@ totalH=imageInputSize[1]+predictionH
 solvedImages=[]
 
 for i in range(predictionIter):
-    print("#############",masked_X.shape)
-
     predicted=model.predict(masked_X.reshape((1,)+masked_X.shape))
 
     #not sure if this is necesary:
@@ -61,8 +59,8 @@ for i in range(predictionIter):
     #plt.show()
 
     #show image
-    #denormalizeImage(canvas).show()
-
+    denormalizeImage(canvas).show()
+    
 
     #define next masked_X
 
