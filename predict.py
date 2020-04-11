@@ -31,34 +31,18 @@ with open('trained/'+modelname+'.json', 'r') as json_file:
 # load weights into new model
 model.load_weights('trained/'+modelname+'_weights.hdf5')
 
+#get first image and normalize the one for prediction
 X,startImage=getRandomJamon(imageInputSize)
 X=normalizeImage(X)
 
-
-#print("X",X)
-#showImage(X[0])
-
 masked_X=maskimageMiddle(X[0])
-
-#print("masked_X",masked_X)
-#print("masked_X shape",masked_X.shape)
-
 masked_X=masked_X.reshape((1,)+masked_X.shape)
 
-#print("masked_X",masked_X.shape)
-
-#showImageNormal(masked_X,"RGB")
-
-
-#cut the original image as the one used for prediction
-#startImage=startImage.crop((0,0,  imageInputSize[0], imageInputSize[1]))
-
+#startimage is a PIL version of the image
 canvas=startImage
-#startImage.show()
 totalH=imageInputSize[1]+predictionH
 
 for i in range(predictionIter):
-
 
     predicted=model.predict(masked_X)
 
@@ -66,12 +50,12 @@ for i in range(predictionIter):
     predicted= 0.5 * predicted[0] + 0.5
 
     canvas=concatenateWithMiddle(startimage,predicted)
-    imgplot=plt.imshow(canvas)
+    #imgplot=plt.imshow(canvas)
     #plt.show()
 
     denormalizeImage(canvas).show()
 
-    sys.exit()
+
 
     ########################### aqui lo dejé #####################################
     im=np.array(canvas)
