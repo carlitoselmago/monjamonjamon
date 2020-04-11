@@ -17,7 +17,7 @@ modelname="generator"
 imageInputSize=[30,30]
 predictionH=10
 
-predictionIter=30
+predictionIter=50
 #:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 
@@ -36,54 +36,64 @@ X,startImage=getRandomJamon(imageInputSize)
 X=normalizeImage(X)
 
 masked_X=maskimageMiddle(X[0])
-masked_X=masked_X.reshape((1,)+masked_X.shape)
+
+
 
 #startimage is a PIL version of the image
 canvas=startImage
 totalH=imageInputSize[1]+predictionH
 
+solvedImages=[]
+
 for i in range(predictionIter):
+    print("#############",masked_X.shape)
 
-    predicted=model.predict(masked_X)
+    predicted=model.predict(masked_X.reshape((1,)+masked_X.shape))
 
-    startimage=0.5 * X[0] + 0.5
-    predicted= 0.5 * predicted[0] + 0.5
+    #not sure if this is necesary:
+    #startimage=0.5 * X[0] + 0.5
+    #predicted= 0.5 * predicted[0] + 0.5
 
-    canvas=concatenateWithMiddle(startimage,predicted)
+    predicted=predicted[0]
+
+    canvas=concatenateWithMiddle(masked_X,predicted)
     #imgplot=plt.imshow(canvas)
     #plt.show()
 
-    denormalizeImage(canvas).show()
+    #show image
+    #denormalizeImage(canvas).show()
 
 
+    #define next masked_X
+
+    #grab next random jamon
+    X,startImage=getRandomJamon(imageInputSize)
+    X=normalizeImage(X)
+
+    #construct next batch
+    masked_X=np.empty_like(X)[0]
+
+
+
+    #top block
+    masked_X[0:predictionH,0:imageInputSize[0],:]=canvas[canvas.shape[1]-predictionH:canvas.shape[1],0:imageInputSize[0],:]
+    #middle block
+    masked_X[predictionH:int(predictionH*2),0:imageInputSize[0],:]=0
+    #bottom block
+    masked_X[int(predictionH*2):imageInputSize[1],0:imageInputSize[0],:]=X[0][0:predictionH,0:imageInputSize[0],:]
+
+    #add extra dimension
+    #masked_X=masked_X.reshape(masked_X.shape+(1,))
+
+    piledimage=denormalizeImage(canvas[predictionH:predictionH*2,0:imageInputSize[0],:])
+    #piledimage.show()
+    #sleep(5)
+    solvedImages.append(piledimage)
 
     ########################### aqui lo dejé #####################################
-    im=np.array(canvas)
-
-    xslice=im[totalH-imageInputSize[1]:totalH,:]
-
-    #xslice=xslice.reshape(xslice.shape+(1,))
 
 
-
-    #xslice=xslice.reshape((1,) + im.shape)
-    totalH+=predictionH
-    X=np.expand_dims(xslice, axis=0)
-
-    masked_X=maskimageBottom(X[0])
-    masked_X.resize((masked_X.shape[0]*2, masked_X.shape[1],masked_X.shape[2]))
-    #print("masked_XR",masked_X)
-    #print("masked_X shape",masked_X.shape)
-    masked_X=masked_X.reshape((1,)+masked_X.shape)
-    print("masked_X shape",masked_X.shape)
-    showImage(masked_X[0])
-    sleep(2)
-
-    #sys.exit()
-    #print("X shape",X.shape)
-    #sys.exit()
-
-    #canvas.show()
-    #sleep(10)
-
-canvas.show()
+finalImage=np.vstack(solvedImages )
+print(finalImage.size)
+finalImage = Image.fromarray(finalImage)
+finalImage.show()
