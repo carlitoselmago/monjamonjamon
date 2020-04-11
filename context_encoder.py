@@ -21,9 +21,9 @@ from time import sleep
 
 class ContextEncoder():
     def __init__(self):
-        self.img_rows = 32
-        self.img_cols = 32
-        self.mask_height = int(self.img_cols/2)#8
+        self.img_rows = 30
+        self.img_cols = 30
+        self.mask_height = int(self.img_cols/3)#8
         self.mask_width = self.img_rows#8
         self.channels = 3
         self.num_classes = 2
@@ -91,11 +91,11 @@ class ContextEncoder():
         model.add(BatchNormalization(momentum=0.8))
         model.add(Conv2D(self.channels, kernel_size=3, padding="same"))
         model.add(Activation('tanh'))
-        
+
         model.add(Flatten())
         model.add(Dense(np.prod((self.mask_height,self.mask_width,self.channels))))
         model.add(Reshape((self.mask_height,self.mask_width,self.channels)))
-        
+
         model.summary()
 
         masked_img = Input(shape=self.img_shape)
@@ -143,19 +143,19 @@ class ContextEncoder():
         return masked_imgs, missing_parts, (y1, y2, x1, x2)
 
     def mask_bottom(self,imgs):
-        
+
         mask_height=self.mask_height#int(self.img_rows)
         mask_width=self.mask_width#self.img_cols
-        
+
         #y1 = np.random.randint(0, self.img_rows - self.mask_height, imgs.shape[0])
         #print("y1",y1)
-        
+
         y1 =np.full( imgs.shape[0], mask_height)
         y2 =np.full( imgs.shape[0], self.img_rows)
         x1 =np.full( imgs.shape[0], 0)
         x2 =np.full( imgs.shape[0], self.img_cols)
-    
-        
+
+
         masked_imgs = np.empty_like(imgs)
         missing_parts = np.empty((imgs.shape[0], mask_height, mask_width, self.channels))
         for i, img in enumerate(imgs):
@@ -164,19 +164,44 @@ class ContextEncoder():
             missing_parts[i] = masked_img[_y1:_y2, _x1:_x2, :].copy()
             masked_img[_y1:_y2, _x1:_x2, :] = 0
             masked_imgs[i] = masked_img
-            
+
+        return masked_imgs, missing_parts, (y1, y2, x1, x2)
+
+    def mask_middle(self,imgs):
+
+        mask_height=self.mask_height#int(self.img_rows)
+        mask_width=self.mask_width#self.img_cols
+
+        #y1 = np.random.randint(0, self.img_rows - self.mask_height, imgs.shape[0])
+        #print("y1",y1)
+
+        y1 =np.full( imgs.shape[0], mask_height)
+        y2 =np.full( imgs.shape[0], mask_height*2)
+        x1 =np.full( imgs.shape[0], 0)
+        x2 =np.full( imgs.shape[0], self.img_cols)
+
+
+        masked_imgs = np.empty_like(imgs)
+        missing_parts = np.empty((imgs.shape[0], mask_height, mask_width, self.channels))
+        for i, img in enumerate(imgs):
+            masked_img = img.copy()
+            _y1, _y2, _x1, _x2 = y1[i], y2[i], x1[i], x2[i]
+            missing_parts[i] = masked_img[_y1:_y2, _x1:_x2, :].copy()
+            masked_img[_y1:_y2, _x1:_x2, :] = 0
+            masked_imgs[i] = masked_img
+
         return masked_imgs, missing_parts, (y1, y2, x1, x2)
 
     def train(self, epochs, batch_size=128, sample_interval=50):
 
         # Load the dataset
         #(X_train, y_train), (_, _) = cifar10.load_data()
-        
+
         # Extract dogs and cats
         #X_cats = X_train[(y_train == 3).flatten()]
         #X_dogs = X_train[(y_train == 5).flatten()]
         #X_train = np.vstack((X_cats, X_dogs))
-        
+
         _,X_test,Y_train,Y_test,X_train,GT_test=loadDataReady2(amount=100000,InputSize=[self.img_rows,self.img_cols],mode="RGB")
 
         # Rescale -1 to 1
@@ -197,12 +222,12 @@ class ContextEncoder():
             idx = np.random.randint(0, X_train.shape[0], batch_size)
             imgs = X_train[idx]
 
-            masked_imgs, missing_parts, _ = self.mask_bottom(imgs)#self.mask_randomly(imgs)
-           
+            masked_imgs, missing_parts, _ = self.mask_middle(imgs)#self.mask_randomly(imgs)
+
             # Generate a batch of new images
             gen_missing = self.generator.predict(masked_imgs)
-            
-            
+
+
             # Train the discriminator
             d_loss_real = self.discriminator.train_on_batch(missing_parts, valid)
             d_loss_fake = self.discriminator.train_on_batch(gen_missing, fake)
@@ -226,12 +251,17 @@ class ContextEncoder():
     def sample_images(self, epoch, imgs):
         r, c = 3, 6
 
-        masked_imgs, missing_parts, (y1, y2, x1, x2) = self.mask_bottom(imgs)#self.mask_randomly(imgs)
+        masked_imgs, missing_parts, (y1, y2, x1, x2) = self.mask_middle(imgs)#self.mask_randomly(imgs)
+
         gen_missing = self.generator.predict(masked_imgs)
 
         imgs = 0.5 * imgs + 0.5
         masked_imgs = 0.5 * masked_imgs + 0.5
         gen_missing = 0.5 * gen_missing + 0.5
+
+        imgplot=plt.imshow(masked_imgs[0])
+        plt.show()
+        sys.exit()
 
         fig, axs = plt.subplots(r, c)
         for i in range(c):
@@ -265,4 +295,5 @@ class ContextEncoder():
 if __name__ == '__main__':
     context_encoder = ContextEncoder()
     context_encoder.train(epochs=30000, batch_size=64, sample_interval=50) #30000
+    #context_encoder.train(epochs=100, batch_size=64, sample_interval=50) #30000
     context_encoder.save_model()

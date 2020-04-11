@@ -121,10 +121,10 @@ class WGAN():
 
         # Load the dataset
         #(X_train, _), (_, _) = mnist.load_data()
-        
+
         #X_train,X_test,Y_train,Y_test,GT_train,GT_test=loadDataReady2()
         _,X_test,Y_train,Y_test,X_train,GT_test=loadDataReady2(amount=100000,InputSize=[self.img_rows,self.img_cols])
-        
+
         #print("X_train",X_train.shape)
         #sys.exit()
         # Rescale -1 to 1
@@ -146,13 +146,13 @@ class WGAN():
                 # Select a random batch of images
                 idx = np.random.randint(0, X_train.shape[0], batch_size)
                 imgs = X_train[idx]
-                
+
                 # Sample noise as generator input
                 noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
 
                 # Generate a batch of new images
                 gen_imgs = self.generator.predict(noise)
-                
+
                 #print("gen_imgs.shape",gen_imgs.shape)
                 #print("")
                 # Train the critic
@@ -201,4 +201,5 @@ class WGAN():
 
 if __name__ == '__main__':
     wgan = WGAN()
-    wgan.train(epochs=4000, batch_size=32, sample_interval=50)
+    #wgan.train(epochs=4000, batch_size=32, sample_interval=50)
+    wgan.train(epochs=100, batch_size=32, sample_interval=50)
